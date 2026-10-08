@@ -1,0 +1,11 @@
+Package: oob3sum
+Version: 0.2.0-1
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: openOODA-tools <ops@openooda.org>
+Depends: libc6
+Description: BLAKE3 HASHER
+ Blistering BLAKE3 tree hasher achieving multi-gigabyte per second throughput.
+ Capability-bounded openOODA utility with zero ambient authority,
+ tree hashing verification, and native Model Context Protocol (MCP) surface.

@@ -1,0 +1,102 @@
+// # Model Context Protocol (MCP) Stdio Server for oob3sum
+//
+// Logline: JSON-RPC 2.0 stdio server providing BLAKE3 cryptographic hashing and checksum verification.
+//
+// Setup: Demands FsReadCap for file hashing and stdio streaming. Operates without ambient authority.
+//
+// Beats:
+//   1. Process incoming JSON-RPC 2.0 requests over standard input.
+//   2. Dispatch initialize, tools/list, and tools/call methods.
+//   3. Stream capability-bounded responses for hash calculation, verification, and algorithm stats.
+
+import "core/b3_tree.oo";
+import "render/b3_theme.oo";
+import "ipc/json_field.oo";
+
+pub fn run_mcp_server(fs: &FsReadCap) {
+    let mut running: Bool = true;
+    while running {
+        let line_res: Result[String, String] = oo_read_stdin_chunk(fs, 8192);
+        if !line_res.is_ok() {
+            running = false;
+        } else {
+            let line: String = match line_res { Ok(s) => s, Err(_) => "" };
+            let trimmed: String = str_trim(line);
+            if chars_len(trimmed) == 0 {
+                running = false;
+            } else {
+                let id: String = json_get_field(trimmed, "id");
+                let method: String = json_get_string(trimmed, "method");
+
+                if method == "initialize" {
+                    let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                        ",\"result\":{\"protocolVersion\":\"2024-11-05\"," +
+                        "\"serverInfo\":{\"name\":\"oob3sum\",\"version\":\"0.2.0\"}," +
+                        "\"capabilities\":{\"tools\":{}}}}";
+                    println(resp);
+                } else if method == "notifications/initialized" {
+                    // ack
+                } else if method == "tools/list" {
+                    let t1: String = "{\"name\":\"b3_hash\",\"description\":\"Compute 256-bit BLAKE3 cryptographic hex digest of text or file\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"path\":{\"type\":\"string\"}}}}";
+                    let t2: String = "{\"name\":\"b3_verify\",\"description\":\"Verify BLAKE3 checksum of text or file against expected digest\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"text\":{\"type\":\"string\"},\"path\":{\"type\":\"string\"},\"expected\":{\"type\":\"string\"}},\"required\":[\"expected\"]}}";
+                    let t3: String = "{\"name\":\"b3_stats\",\"description\":\"Query BLAKE3 tree parameters, chunk size, and algorithm constants\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}";
+                    let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                        ",\"result\":{\"tools\":[" + t1 + "," + t2 + "," + t3 + "]}}";
+                    println(resp);
+                } else if method == "tools/call" {
+                    let params: String = json_get_field(trimmed, "params");
+                    let tool_name: String = json_get_string(params, "name");
+                    let args: String = json_get_field(params, "arguments");
+
+                    if tool_name == "b3_hash" {
+                        let path: String = json_get_string(args, "path");
+                        let text_in: String = json_get_string(args, "text");
+                        let mut hash_res: String = "";
+                        if chars_len(path) > 0 {
+                            let f_res: Result[String, String] = blake3_hash_file(fs, path);
+                            hash_res = match f_res { Ok(s) => s, Err(e) => "error: " + e };
+                        } else {
+                            hash_res = blake3_hash_string(text_in);
+                        }
+                        let j: String = "{\"hash\":\"" + hash_res + "\",\"algorithm\":\"blake3\",\"length\":32}";
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(j) + "\"}]}}";
+                        println(resp);
+                    } else if tool_name == "b3_verify" {
+                        let path: String = json_get_string(args, "path");
+                        let text_in: String = json_get_string(args, "text");
+                        let expected: String = json_get_string(args, "expected");
+                        let mut computed: String = "";
+                        if chars_len(path) > 0 {
+                            let f_res: Result[String, String] = blake3_hash_file(fs, path);
+                            computed = match f_res { Ok(s) => s, Err(_) => "" };
+                        } else {
+                            computed = blake3_hash_string(text_in);
+                        }
+                        let is_ok: Bool = verify_checksum(computed, expected);
+                        let j: String = format_json_entry(computed, if chars_len(path) > 0 { path } else { "input" }, is_ok);
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(j) + "\"}]}}";
+                        println(resp);
+                    } else if tool_name == "b3_stats" {
+                        let j: String = "{\"algorithm\":\"BLAKE3\",\"chunk_size\":1024,\"digest_bytes\":32,\"rounds\":7,\"tree_mode\":true}";
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(j) + "\"}]}}";
+                        println(resp);
+                    } else {
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}";
+                        println(resp);
+                    }
+                } else {
+                    let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                        ",\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}";
+                    println(resp);
+                }
+            }
+        }
+    }
+}

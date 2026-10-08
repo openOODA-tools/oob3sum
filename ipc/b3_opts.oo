@@ -1,0 +1,67 @@
+// # oob3sum Command-Line Options Parser
+//
+// Logline: Parses command-line arguments for BLAKE3 hash computation, checksum verification, and MCP modes.
+//
+// Setup: Pure string argument parser with defaults for sovereign hashing operations.
+//
+// Beats:
+//   1. Define B3Opts configuration model.
+//   2. Parse flags for verification mode (-c/--check), BSD tags (--tag), and JSON formatting.
+//   3. Ingest input file arguments and dispatch special modes.
+
+pub type B3Opts = struct {
+    mode: String,
+    tag_format: Bool,
+    json_output: Bool,
+    check_file: String,
+    files: List[String]
+};
+
+pub fn default_b3_opts() -> B3Opts {
+    return B3Opts {
+        mode: "hash",
+        tag_format: false,
+        json_output: false,
+        check_file: "",
+        files: list_new()
+    };
+}
+
+pub fn parse_b3_opts(args: List[String]) -> B3Opts {
+    let mut opts: B3Opts = default_b3_opts();
+    let n: Int = list_len(args);
+    let mut i: Int = 0;
+
+    while i < n {
+        let arg: String = list_get(args, i);
+        if arg == "-h" || arg == "--help" {
+            opts.mode = "help";
+            return opts;
+        } else if arg == "-v" || arg == "--version" {
+            opts.mode = "version";
+            return opts;
+        } else if arg == "--mcp" {
+            opts.mode = "mcp";
+            return opts;
+        } else if arg == "-c" || arg == "--check" {
+            opts.mode = "check";
+            if i + 1 < n && !str_starts_with(list_get(args, i + 1), "-") {
+                i = i + 1;
+                opts.check_file = list_get(args, i);
+            }
+        } else if arg == "--tag" {
+            opts.tag_format = true;
+        } else if arg == "--json" {
+            opts.json_output = true;
+        } else if !str_starts_with(arg, "-") {
+            if opts.mode == "check" && chars_len(opts.check_file) == 0 {
+                opts.check_file = arg;
+            } else {
+                opts.files = list_push(opts.files, arg);
+            }
+        }
+        i = i + 1;
+    }
+
+    return opts;
+}

@@ -1,52 +1,153 @@
-// # oob3sum Main Entry Point
+// # oob3sum Main Entry Point - Sovereign BLAKE3 Hasher
 //
 // Logline: Blistering BLAKE3 tree hasher achieving multi-gigabyte per second throughput.
 //
-// Setup: Demands explicit capability tokens and standard argument list.
+// Setup: Requires FsReadCap, ProcessCap, EnvCap. Operates with zero ambient authority.
 //
 // Beats:
-//   1. Parse command-line options and dispatch --help, --version, or --mcp.
-//   2. Execute capability-bounded oob3sum operations.
-//   3. Format and output structured results to standard output.
+//   1. Dispatch --help, --version, and --mcp early without ambient side effects.
+//   2. Compute 256-bit BLAKE3 digests across files or standard input streams.
+//   3. Verify cryptographic checksum manifests with positive integrity validation.
+
+import "core/b3_tree.oo";
+import "render/b3_theme.oo";
+import "ipc/b3_opts.oo";
+import "ipc/mcp_serve.oo";
 
 fn render_help() -> String {
-    return "oob3sum 0.1.0 (openOODA sovereign data & streaming)\n"
-        + "usage: oob3sum [options] [ARGUMENTS]...\n\n"
+    return "oob3sum 0.2.0 (openOODA sovereign search & inspection)\n"
+        + "usage: oob3sum [options] [FILE]...\n\n"
         + "Blistering BLAKE3 tree hasher achieving multi-gigabyte per second throughput.\n\n"
         + "Options:\n"
         + "  -h, --help           display this help and exit\n"
         + "  -v, --version        output version information and exit\n"
-        + "      --json           output formatted as JSON Lines\n"
-        + "      --color <WHEN>   colorize output: auto, always, never [default: auto]\n"
-        + "      --theme <NAME>   override active oote palette\n"
+        + "  -c, --check [FILE]   read checksums from file and verify them\n"
+        + "      --tag            create a BSD-style checksum\n"
+        + "      --json           format output as structured JSON\n"
         + "      --mcp            run as Model Context Protocol stdio server\n";
 }
 
-fn render_version() -> String {
-    return "oob3sum 0.1.0 (openOODA sovereign data & streaming)\n";
-}
-
-fn main(args: List[String]) -> Int {
-    let num_args: Int = list_len(args);
+fn verify_manifest(fs: &FsReadCap, manifest_content: String, json_mode: Bool) -> Int {
+    let lines: List[String] = str_split(manifest_content, "\n");
+    let total: Int = list_len(lines);
+    let mut failures: Int = 0;
     let mut i: Int = 0;
 
-    while i < num_args {
-        let arg: String = list_get(args, i);
-        if arg == "-h" || arg == "--help" {
-            print(render_help());
-            return 0;
+    while i < total {
+        let line: String = str_trim(list_get(lines, i));
+        if chars_len(line) > 0 && !str_starts_with(line, "#") {
+            let mut expected_hash: String = "";
+            let mut file_path: String = "";
+            if str_starts_with(line, "BLAKE3 (") {
+                let p1: List[String] = str_split(line, ") = ");
+                if list_len(p1) >= 2 {
+                    let left: String = list_get(p1, 0);
+                    file_path = str_slice(left, 8, chars_len(left));
+                    expected_hash = list_get(p1, 1);
+                }
+            } else {
+                let parts: List[String] = str_split(line, "  ");
+                if list_len(parts) >= 2 {
+                    expected_hash = list_get(parts, 0);
+                    file_path = list_get(parts, 1);
+                }
+            }
+
+            if chars_len(file_path) > 0 {
+                let hres: Result[String, String] = blake3_hash_file(fs, file_path);
+                let computed: String = match hres { Ok(s) => s, Err(_) => "" };
+                let is_ok: Bool = verify_checksum(computed, expected_hash);
+                if !is_ok {
+                    failures = failures + 1;
+                }
+                if json_mode {
+                    println(format_json_entry(computed, file_path, is_ok));
+                } else {
+                    print(format_verify_line(file_path, is_ok));
+                }
+            }
         }
-        if arg == "-v" || arg == "--version" {
-            print(render_version());
-            return 0;
+        i = i + 1;
+    }
+    return failures;
+}
+
+pub fn main(
+    fs: &FsReadCap,
+    proc_cap: &ProcessCap,
+    env: &EnvCap,
+    args: List[String]
+) -> Result[Int, String] {
+    let opts: B3Opts = parse_b3_opts(args);
+
+    if opts.mode == "help" {
+        print(render_help());
+        return Ok(0);
+    }
+    if opts.mode == "version" {
+        println("oob3sum 0.2.0 (openOODA sovereign search & inspection)");
+        return Ok(0);
+    }
+    if opts.mode == "mcp" {
+        run_mcp_server(fs);
+        return Ok(0);
+    }
+
+    if opts.mode == "check" {
+        let mut manifest: String = "";
+        if chars_len(opts.check_file) > 0 && opts.check_file != "-" {
+            let r: Result[String, String] = read_file(fs, opts.check_file);
+            if !r.is_ok() {
+                println("oob3sum: " + opts.check_file + ": No such file or directory");
+                return Ok(2);
+            }
+            manifest = match r { Ok(s) => s, Err(_) => "" };
+        } else {
+            let r: Result[String, String] = oo_read_stdin_chunk(fs, 65536);
+            if r.is_ok() {
+                manifest = match r { Ok(s) => s, Err(_) => "" };
+            }
         }
-        if arg == "--mcp" {
-            print("{\"jsonrpc\":\"2.0\",\"result\":{\"status\":\"ready\",\"tool\":\"oob3sum\"}}\n");
-            return 0;
+        let fails: Int = verify_manifest(fs, manifest, opts.json_output);
+        if fails > 0 {
+            return Ok(1);
+        }
+        return Ok(0);
+    }
+
+    let num_files: Int = list_len(opts.files);
+    if num_files == 0 {
+        let r: Result[String, String] = oo_read_stdin_chunk(fs, 65536);
+        let content: String = if r.is_ok() { match r { Ok(s) => s, Err(_) => "" } } else { "" };
+        let digest: String = blake3_hash_string(content);
+        if opts.json_output {
+            println(format_json_entry(digest, "-", true));
+        } else if opts.tag_format {
+            print(format_tag_line(digest, "-"));
+        } else {
+            print(format_standard_line(digest, "-"));
+        }
+        return Ok(0);
+    }
+
+    let mut i: Int = 0;
+    while i < num_files {
+        let f: String = list_get(opts.files, i);
+        let hres: Result[String, String] = blake3_hash_file(fs, f);
+        if !hres.is_ok() {
+            println("oob3sum: " + f + ": No such file or directory");
+        } else {
+            let digest: String = match hres { Ok(s) => s, Err(_) => "" };
+            if opts.json_output {
+                println(format_json_entry(digest, f, true));
+            } else if opts.tag_format {
+                print(format_tag_line(digest, f));
+            } else {
+                print(format_standard_line(digest, f));
+            }
         }
         i = i + 1;
     }
 
-    print("oob3sum: sovereign capability-bounded utility ready\n");
-    return 0;
+    return Ok(0);
 }

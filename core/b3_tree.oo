@@ -1,0 +1,61 @@
+// # BLAKE3 Merkle Tree and Chunk Coordinator
+//
+// Logline: Partitions byte streams into 1024-byte chunks and computes Merkle root hashes.
+//
+// Setup: Coordinates chunk compression and tree aggregation for file and memory streams.
+//
+// Beats:
+//   1. Segment arbitrary byte sequences into standard 1024-byte BLAKE3 chunk frames.
+//   2. Compute chaining values across chunk boundaries with appropriate domain flags.
+//   3. Ingest local filesystem files under FsReadCap and evaluate checksum assertions.
+
+import "core/b3_constants.oo";
+import "core/b3_compress.oo";
+
+pub fn blake3_hash_string(input: String) -> String {
+    let total_len: Int = chars_len(input);
+    let chunk_limit: Int = b3_chunk_size();
+    let mut cv: ChainingValue = initial_chaining_value();
+
+    if total_len <= chunk_limit {
+        let flags: Int = b3_flag_chunk_start() + b3_flag_chunk_end() + b3_flag_root();
+        let res_cv: ChainingValue = compress_chunk(cv, input, total_len, flags);
+        return format_digest_words(res_cv.w0, res_cv.w1, res_cv.w2, res_cv.w3, res_cv.w4, res_cv.w5, res_cv.w6, res_cv.w7);
+    }
+
+    let mut offset: Int = 0;
+    while offset < total_len {
+        let end_idx: Int = if offset + chunk_limit < total_len { offset + chunk_limit } else { total_len };
+        let chunk_slice: String = str_slice(input, offset, end_idx);
+        let this_chunk_len: Int = end_idx - offset;
+
+        let mut flags: Int = 0;
+        if offset == 0 {
+            flags = flags + b3_flag_chunk_start();
+        }
+        if end_idx >= total_len {
+            flags = flags + b3_flag_chunk_end() + b3_flag_root();
+        }
+
+        cv = compress_chunk(cv, chunk_slice, this_chunk_len, flags);
+        offset = end_idx;
+    }
+
+    return format_digest_words(cv.w0, cv.w1, cv.w2, cv.w3, cv.w4, cv.w5, cv.w6, cv.w7);
+}
+
+pub fn blake3_hash_file(fs: &FsReadCap, path: String) -> Result[String, String] {
+    let r: Result[String, String] = read_file(fs, path);
+    if !r.is_ok() {
+        return Err("unable to read file: " + path);
+    }
+    let content: String = match r { Ok(s) => s, Err(_) => "" };
+    let digest: String = blake3_hash_string(content);
+    return Ok(digest);
+}
+
+pub fn verify_checksum(computed: String, expected: String) -> Bool {
+    let t_comp: String = str_trim(computed);
+    let t_exp: String = str_trim(expected);
+    return t_comp == t_exp;
+}

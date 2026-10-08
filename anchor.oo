@@ -1,13 +1,18 @@
 // # oob3sum Root Anchor
 //
-// Logline: Top-level anchor re-exporting options, core logic, render, and ipc subsystems.
+// Logline: Consolidates BLAKE3 engine, output formatters, options parsing, and MCP services.
 //
-// Setup: Pure shim re-exporting all oob3sum subsystem anchors.
+// Setup: Root barrel shim linking all oob3sum internal domains.
 //
 // Beats:
-//   1. Re-export options parsing subsystem.
-//   2. Re-export core oob3sum execution engine.
-//   3. Re-export render formatting subsystem.
-//   4. Re-export Model Context Protocol (MCP) IPC subsystem.
+//   1. Re-export core BLAKE3 constants and tree hashing coordinator.
+//   2. Re-export digest formatting themes and JSON serializers.
+//   3. Re-export IPC options parser and Model Context Protocol server.
 
-import "main.oo";
+import "core/anchor.oo";
+import "render/anchor.oo";
+import "ipc/anchor.oo";
+
+pub fn b3_version() -> String {
+    return "0.2.0";
+}

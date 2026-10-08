@@ -1,0 +1,18 @@
+// # oob3sum Core Subsystem Anchor
+//
+// Logline: Consolidates BLAKE3 constants, chunk compression, and tree hashing engine.
+//
+// Setup: Root barrel shim for core BLAKE3 cryptographic operations.
+//
+// Beats:
+//   1. Re-export BLAKE3 architectural constants and hex formatters.
+//   2. Re-export quarter-round compression and chaining value permutations.
+//   3. Re-export tree chunk coordinator and file hash calculators.
+
+import "core/b3_constants.oo";
+import "core/b3_compress.oo";
+import "core/b3_tree.oo";
+
+pub fn core_subsystem_version() -> String {
+    return "0.2.0";
+}

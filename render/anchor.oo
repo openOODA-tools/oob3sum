@@ -1,0 +1,16 @@
+// # oob3sum Render Subsystem Anchor
+//
+// Logline: Consolidates checksum line syntax, BSD tag formats, and JSON output serializers.
+//
+// Setup: Root barrel shim for cryptographic digest formatting.
+//
+// Beats:
+//   1. Re-export ANSI color styles and text formatting primitives.
+//   2. Re-export standard POSIX and BSD-style checksum line generators.
+//   3. Re-export JSON serialization for cryptographic verification records.
+
+import "render/b3_theme.oo";
+
+pub fn render_subsystem_version() -> String {
+    return "0.2.0";
+}

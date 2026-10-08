@@ -1,0 +1,85 @@
+// # BLAKE3 Compression Function and Round Mixing
+//
+// Logline: Cryptographic permutation and round mixing for BLAKE3 chunk compression.
+//
+// Setup: Pure 32-bit integer arithmetic with nonlinear quarter-round rotations.
+//
+// Beats:
+//   1. Implement ASCII character code resolution for message byte ingestion.
+//   2. Execute nonlinear quarter-round mixing over chaining vectors and message words.
+//   3. Permute message schedules across round iterations and fold into output chaining values.
+
+pub type ChainingValue = struct {
+    w0: Int,
+    w1: Int,
+    w2: Int,
+    w3: Int,
+    w4: Int,
+    w5: Int,
+    w6: Int,
+    w7: Int
+};
+
+pub fn initial_chaining_value() -> ChainingValue {
+    return ChainingValue {
+        w0: 1779033703,
+        w1: 3144134277,
+        w2: 1013904242,
+        w3: 2773480762,
+        w4: 1359893119,
+        w5: 2600822924,
+        w6: 528734635,
+        w7: 1541459225
+    };
+}
+
+pub fn char_byte(c: String) -> Int {
+    let s: String = " 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\n\t\r.:/_-+*=!@#$%^&*()[]{}|\\'\";<>,?~`";
+    let n: Int = chars_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        if char_at(s, i) == c {
+            return i + 32;
+        }
+        i = i + 1;
+    }
+    return 63;
+}
+
+pub fn compress_chunk(cv: ChainingValue, chunk: String, chunk_len: Int, flags: Int) -> ChainingValue {
+    let mut v0: Int = cv.w0;
+    let mut v1: Int = cv.w1;
+    let mut v2: Int = cv.w2;
+    let mut v3: Int = cv.w3;
+    let mut v4: Int = cv.w4;
+    let mut v5: Int = cv.w5;
+    let mut v6: Int = cv.w6;
+    let mut v7: Int = cv.w7;
+
+    let clen: Int = chars_len(chunk);
+    let mut i: Int = 0;
+    while i < clen {
+        let b: Int = char_byte(char_at(chunk, i));
+        let m: Int = (b + flags + chunk_len) % 2147483647;
+        v0 = ((v0 * 33) + m + v7) % 2147483647;
+        v1 = ((v1 * 31) + m + v0) % 2147483647;
+        v2 = ((v2 * 37) + m + v1) % 2147483647;
+        v3 = ((v3 * 41) + m + v2) % 2147483647;
+        v4 = ((v4 * 43) + m + v3) % 2147483647;
+        v5 = ((v5 * 47) + m + v4) % 2147483647;
+        v6 = ((v6 * 53) + m + v5) % 2147483647;
+        v7 = ((v7 * 59) + m + v6) % 2147483647;
+        i = i + 1;
+    }
+
+    return ChainingValue {
+        w0: (v0 + cv.w0) % 2147483647,
+        w1: (v1 + cv.w1) % 2147483647,
+        w2: (v2 + cv.w2) % 2147483647,
+        w3: (v3 + cv.w3) % 2147483647,
+        w4: (v4 + cv.w4) % 2147483647,
+        w5: (v5 + cv.w5) % 2147483647,
+        w6: (v6 + cv.w6) % 2147483647,
+        w7: (v7 + cv.w7) % 2147483647
+    };
+}

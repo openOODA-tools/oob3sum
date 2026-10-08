@@ -1,0 +1,61 @@
+// # oob3sum Rendering and Digest Formatter
+//
+// Logline: Formats BLAKE3 cryptographic digests, BSD tags, and verification statuses.
+//
+// Setup: Pure string formatter supporting standard checksum lines, BSD syntax, and JSON envelopes.
+//
+// Beats:
+//   1. Provide ANSI styling helpers for verification success and failure indicators.
+//   2. Format standard two-space checksum entries and BSD tag declarations.
+//   3. Render JSON envelopes for programmatic cryptographic audit consumption.
+
+pub fn ansi_reset() -> String { return "\x1b[0m"; }
+pub fn ansi_bold() -> String { return "\x1b[1m"; }
+pub fn ansi_green() -> String { return "\x1b[32m"; }
+pub fn ansi_red() -> String { return "\x1b[31m"; }
+pub fn ansi_cyan() -> String { return "\x1b[36m"; }
+
+fn json_escape_simple(s: String) -> String {
+    let mut out: String = "";
+    let n: Int = chars_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(s, i);
+        if c == "\\" {
+            out = out + "\\\\";
+        } else if c == "\"" {
+            out = out + "\\\"";
+        } else if c == "\n" {
+            out = out + "\\n";
+        } else if c == "\r" {
+            out = out + "\\r";
+        } else if c == "\t" {
+            out = out + "\\t";
+        } else {
+            out = out + c;
+        }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn format_standard_line(digest: String, filename: String) -> String {
+    return digest + "  " + filename + "\n";
+}
+
+pub fn format_tag_line(digest: String, filename: String) -> String {
+    return "BLAKE3 (" + filename + ") = " + digest + "\n";
+}
+
+pub fn format_verify_line(filename: String, is_ok: Bool) -> String {
+    if is_ok {
+        return filename + ": " + ansi_green() + "OK" + ansi_reset() + "\n";
+    }
+    return filename + ": " + ansi_red() + ansi_bold() + "FAILED" + ansi_reset() + "\n";
+}
+
+pub fn format_json_entry(digest: String, filename: String, is_ok: Bool) -> String {
+    return "{\"file\":\"" + json_escape_simple(filename) + "\""
+        + ",\"hash\":\"" + digest + "\""
+        + ",\"verified\":" + (if is_ok { "true" } else { "false" }) + "}";
+}

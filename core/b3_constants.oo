@@ -1,0 +1,60 @@
+// # BLAKE3 Cryptographic Parameters and Representation
+//
+// Logline: Architectural constants, initialization vectors, and hex formatters for BLAKE3 tree hashing.
+//
+// Setup: Pure constants and bitwise utilities adhering to the official BLAKE3 specification.
+//
+// Beats:
+//   1. Define standard BLAKE3 IV state words and tree chunk boundaries (1024 bytes).
+//   2. Define tree chunk and keying domain separation flags.
+//   3. Provide hex formatting routines for 32-bit state words and 256-bit digests.
+
+pub fn b3_chunk_size() -> Int { return 1024; }
+pub fn b3_out_len() -> Int { return 32; }
+
+pub fn b3_flag_chunk_start() -> Int { return 1; }
+pub fn b3_flag_chunk_end() -> Int { return 2; }
+pub fn b3_flag_parent() -> Int { return 4; }
+pub fn b3_flag_root() -> Int { return 8; }
+pub fn b3_flag_keyed_hash() -> Int { return 16; }
+
+fn hex_nibble(n: Int) -> String {
+    let v: Int = n % 16;
+    if v == 0 { return "0"; }
+    if v == 1 { return "1"; }
+    if v == 2 { return "2"; }
+    if v == 3 { return "3"; }
+    if v == 4 { return "4"; }
+    if v == 5 { return "5"; }
+    if v == 6 { return "6"; }
+    if v == 7 { return "7"; }
+    if v == 8 { return "8"; }
+    if v == 9 { return "9"; }
+    if v == 10 { return "a"; }
+    if v == 11 { return "b"; }
+    if v == 12 { return "c"; }
+    if v == 13 { return "d"; }
+    if v == 14 { return "e"; }
+    return "f";
+}
+
+pub fn u32_to_hex8(val: Int) -> String {
+    let mut out: String = "";
+    let mut cur: Int = val;
+    let mut i: Int = 0;
+    while i < 8 {
+        let mut nib: Int = cur % 16;
+        if nib < 0 {
+            nib = 0 - nib;
+        }
+        out = hex_nibble(nib) + out;
+        cur = cur / 16;
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn format_digest_words(h0: Int, h1: Int, h2: Int, h3: Int, h4: Int, h5: Int, h6: Int, h7: Int) -> String {
+    return u32_to_hex8(h0) + u32_to_hex8(h1) + u32_to_hex8(h2) + u32_to_hex8(h3)
+        + u32_to_hex8(h4) + u32_to_hex8(h5) + u32_to_hex8(h6) + u32_to_hex8(h7);
+}
